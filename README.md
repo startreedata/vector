@@ -1,3 +1,9 @@
+For startree build
+
+Switch to the docker-build branch and find dockerfile under the root path, the instruction for building the img
+is in the comments of the docker file
+
+
 <p align="center">
   <strong>
     <a href="https://vector.dev/docs/setup/quickstart/">Quickstart</a>&nbsp;&nbsp;&bull;&nbsp;&nbsp;
