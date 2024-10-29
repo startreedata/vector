@@ -1,6 +1,6 @@
 use std::{fs::File, io::Read};
 
-use aws_smithy_http::body::SdkBody;
+use aws_smithy_types::body::SdkBody;
 use bytes::Bytes;
 use chrono::Utc;
 use futures::StreamExt;
@@ -199,7 +199,7 @@ async fn structures_events_correctly() {
     flush(common).await.unwrap();
 
     let response = reqwest::Client::new()
-        .get(&format!("{}/{}/_search", base_url, index))
+        .get(format!("{}/{}/_search", base_url, index))
         .json(&json!({
             "query": { "query_string": { "query": "*" } }
         }))
@@ -293,7 +293,7 @@ async fn auto_version_aws() {
             },
         )),
         endpoints: vec![aws_server()],
-        aws: Some(RegionOrEndpoint::with_region(String::from("localstack"))),
+        aws: Some(RegionOrEndpoint::with_region(String::from("us-east-1"))),
         api_version: ElasticsearchApiVersion::Auto,
         batch: batch_settings(),
         ..Default::default()
@@ -399,7 +399,7 @@ async fn insert_events_on_aws() {
                 },
             )),
             endpoints: vec![aws_server()],
-            aws: Some(RegionOrEndpoint::with_region(String::from("localstack"))),
+            aws: Some(RegionOrEndpoint::with_region(String::from("us-east-1"))),
             api_version: ElasticsearchApiVersion::V6,
             batch: batch_settings(),
             ..Default::default()
@@ -425,7 +425,7 @@ async fn insert_events_on_aws_with_compression() {
                 },
             )),
             endpoints: vec![aws_server()],
-            aws: Some(RegionOrEndpoint::with_region(String::from("localstack"))),
+            aws: Some(RegionOrEndpoint::with_region(String::from("us-east-1"))),
             compression: Compression::gzip_default(),
             api_version: ElasticsearchApiVersion::V6,
             batch: batch_settings(),
@@ -669,7 +669,7 @@ async fn run_insert_tests_with_config(
 
     let client = create_http_client();
     let mut response = client
-        .get(&format!("{}/{}/_search", base_url, index))
+        .get(format!("{}/{}/_search", base_url, index))
         .basic_auth("elastic", Some("vector"))
         .json(&json!({
             "query": { "query_string": { "query": "*" } }
@@ -698,7 +698,7 @@ async fn run_insert_tests_with_config(
         // https://github.com/rust-lang/rust-clippy/issues/6909
         let input = input
             .into_iter()
-            .map(|rec| serde_json::to_value(&rec.into_log()).unwrap())
+            .map(|rec| serde_json::to_value(rec.into_log()).unwrap())
             .collect::<Vec<_>>();
 
         for hit in hits {
@@ -758,7 +758,7 @@ async fn run_insert_tests_with_multiple_endpoints(config: &ElasticsearchConfig) 
     let mut total = 0;
     for base_url in base_urls {
         if let Ok(response) = client
-            .get(&format!("{}/{}/_search", base_url, index))
+            .get(format!("{}/{}/_search", base_url, index))
             .basic_auth("elastic", Some("vector"))
             .json(&json!({
                 "query": { "query_string": { "query": "*" } }
