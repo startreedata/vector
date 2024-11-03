@@ -39,6 +39,10 @@ static ALLOC: self::internal_telemetry::allocations::Allocator<tikv_jemallocator
         tikv_jemallocator::Jemalloc,
     );
 
+#[allow(non_upper_case_globals)]
+#[export_name = "malloc_conf"]
+pub static malloc_conf: &[u8] = b"prof:true,prof_active:true,lg_prof_sample:19\0";
+
 #[allow(unreachable_pub)]
 pub mod internal_telemetry;
 
