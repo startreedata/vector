@@ -544,8 +544,6 @@ pub fn init_logging(color: bool, format: LogFormat, log_level: &str, rate: u64) 
 //
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::response::IntoResponse;
-use axum_core::response::into_response::IntoResponse;
 use warp::Reply;
 use warp::reject::sealed::IsReject;
 
