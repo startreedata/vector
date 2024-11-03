@@ -545,7 +545,7 @@ pub fn init_logging(color: bool, format: LogFormat, log_level: &str, rate: u64) 
 use axum::response::IntoResponse;
 //use http::{StatusCode};
 
-pub async fn handle_get_heap() -> Result<impl IntoResponse, (StatusCode, String)> {
+pub async fn handle_get_heap() -> Result<impl IntoResponse, (http::StatusCode, String)> {
     let mut prof_ctl = jemalloc_pprof::PROF_CTL.as_ref().unwrap().lock().await;
     require_profiling_activated(&prof_ctl)?;
     let pprof = prof_ctl
@@ -555,11 +555,11 @@ pub async fn handle_get_heap() -> Result<impl IntoResponse, (StatusCode, String)
 }
 
 /// Checks whether jemalloc profiling is activated an returns an error response if not.
-fn require_profiling_activated(prof_ctl: &jemalloc_pprof::JemallocProfCtl) -> Result<(), (StatusCode, String)> {
+fn require_profiling_activated(prof_ctl: &jemalloc_pprof::JemallocProfCtl) -> Result<(), (http::StatusCode, String)> {
     if prof_ctl.activated() {
         Ok(())
     } else {
-        Err((axum::http::StatusCode::FORBIDDEN, "heap profiling not activated".into()))
+        Err((http::StatusCode::FORBIDDEN, "heap profiling not activated".into()))
     }
 }
 //
