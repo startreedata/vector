@@ -542,10 +542,10 @@ pub fn init_logging(color: bool, format: LogFormat, log_level: &str, rate: u64) 
 
 //
 //use axum::http::StatusCode;
-use axum::response::IntoResponse;
+//use axum::response::IntoResponse;
 //use http::{StatusCode};
 
-pub async fn handle_get_heap() -> Result<impl IntoResponse, (http::StatusCode, String)> {
+pub async fn handle_get_heap() -> Result<impl axum::response::IntoResponse, (http::StatusCode, String)> {
     let mut prof_ctl = jemalloc_pprof::PROF_CTL.as_ref().unwrap().lock().await;
     require_profiling_activated(&prof_ctl)?;
     let pprof = prof_ctl
