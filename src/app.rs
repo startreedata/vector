@@ -551,7 +551,6 @@ pub fn init_logging(color: bool, format: LogFormat, log_level: &str, rate: u64) 
 //
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use warp::Reply;
 
 pub async fn handle_get_heap() -> Result<impl IntoResponse, (StatusCode, String)> {
     let mut prof_ctl = jemalloc_pprof::PROF_CTL.as_ref().unwrap().lock().await;
