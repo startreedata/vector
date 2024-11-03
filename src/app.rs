@@ -541,7 +541,7 @@ pub fn init_logging(color: bool, format: LogFormat, log_level: &str, rate: u64) 
     info!(message = "Log level is enabled.", level = ?level);
 }
 
-///
+//
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 
@@ -562,4 +562,4 @@ fn require_profiling_activated(prof_ctl: &jemalloc_pprof::JemallocProfCtl) -> Re
         Err((axum::http::StatusCode::FORBIDDEN, "heap profiling not activated".into()))
     }
 }
-///
+//
