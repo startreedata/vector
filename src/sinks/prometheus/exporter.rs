@@ -472,18 +472,9 @@ impl PrometheusExporter {
         tokio::spawn(async move {
             // build our application with a route
             let app = axum::Router::new()
-                // `GET /` goes to `root`
                 .route("/debug/pprof/heap", axum::routing::get(handle_get_heap));
 
-            // run our app with hyper
-            // `axum::Server` is a re-export of `hyper::Server`
             info!(message = "Building endpoint for pprofile.", address = %addr);
-//             tracing::debug!("listening on {}", addr);
-//             hyper::Server::bind(&addr)
-//                 .serve(app.into_make_service())
-//                 .await
-//                 .unwrap();
-
             Server::builder(hyper::server::accept::from_stream(pprofile_listener.accept_stream()))
                 .serve(app.into_make_service())
                 .await
