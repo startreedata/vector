@@ -1,10 +1,10 @@
 FROM ubuntu:latest AS builder
 WORKDIR /vector
-COPY vector-0.43.0.custom.dd6550825-x86_64-unknown-linux-musl.tar.gz ./
-RUN tar -xvf vector-0.43.0.custom.dd6550825-x86_64-unknown-linux-musl.tar.gz --strip-components=2
+COPY vector-0.43.0.custom.196222aa1-x86_64-unknown-linux-musl.tar.gz ./
+RUN tar -xvf vector-0.43.0.custom.196222aa1-x86_64-unknown-linux-musl.tar.gz --strip-components=2
 RUN mkdir -p /var/lib/vector
 FROM ubuntu:latest
-RUN apt-get update && apt-get install -y ca-certificates tzdata build-essential libc6-dbg libunwind-dev valgrind curl wget && apt-get clean && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y ca-certificates tzdata build-essential libc6-dbg libunwind-dev valgrind curl wget net-tools && apt-get clean && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /vector/bin/* /usr/local/bin/
 COPY --from=builder /vector/config/vector.yaml /etc/vector/vector.yaml
 COPY --from=builder /var/lib/vector /var/lib/vector
