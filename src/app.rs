@@ -155,7 +155,6 @@ impl Application {
         let (runtime, app) =
             Self::prepare_start(extra_context).unwrap_or_else(|code| std::process::exit(code));
 
-
         runtime.block_on(app.run())
     }
 
