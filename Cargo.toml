@@ -352,7 +352,7 @@ socket2 = { version = "0.5.7", default-features = false }
 stream-cancel = { version = "0.8.2", default-features = false }
 strip-ansi-escapes = { version = "0.2.0", default-features = false }
 syslog = { version = "6.1.1", default-features = false, optional = true }
-tikv-jemallocator = { version = "0.6.0", default-features = false, features = ["unprefixed_malloc_on_supported_platforms"], optional = true }
+tikv-jemallocator = { version = "0.6.0", default-features = false, features = ["unprefixed_malloc_on_supported_platforms", "profiling"], optional = true }
 tokio-postgres = { version = "0.7.12", default-features = false, features = ["runtime", "with-chrono-0_4"], optional = true }
 tokio-tungstenite = { version = "0.20.1", default-features = false, features = ["connect"], optional = true }
 toml.workspace = true
@@ -370,6 +370,7 @@ heim = { git = "https://github.com/vectordotdev/heim.git", branch = "update-nix"
 
 # make sure to update the external docs when the Lua version changes
 mlua = { version = "0.9.9", default-features = false, features = ["lua54", "send", "vendored", "macros"], optional = true }
+jemalloc_pprof = "0.6.0"
 
 [target.'cfg(windows)'.dependencies]
 windows-service = "0.7.0"

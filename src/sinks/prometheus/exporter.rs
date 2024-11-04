@@ -463,8 +463,28 @@ impl PrometheusExporter {
         let tls = MaybeTlsSettings::from_config(&tls, true)?;
         let listener = tls.bind(&address).await?;
 
+
+        let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 7979));
+        let pprofile_tls = self.config.tls.clone();
+        let pp_tls = MaybeTlsSettings::from_config(&pprofile_tls, true)?;
+        let pprofile_listener = pp_tls.bind(&addr).await?;
+
         tokio::spawn(async move {
-            info!(message = "Building HTTP server.", address = %address);
+            // build our application with a route
+            let app = axum::Router::new()
+                .route("/debug/pprof/heap", axum::routing::get(handle_get_heap));
+
+            info!(message = "Building endpoint for pprofile.", address = %addr);
+            Server::builder(hyper::server::accept::from_stream(pprofile_listener.accept_stream()))
+                .serve(app.into_make_service())
+                .await
+                .unwrap();
+
+            Ok::<(), ()>(())
+        });
+
+        tokio::spawn(async move {
+            info!(message = "Building HTTP prom exporter server.", address = %address);
 
             Server::builder(hyper::server::accept::from_stream(listener.accept_stream()))
                 .serve(new_service)
@@ -1660,5 +1680,25 @@ mod integration_tests {
 
         drop(tx);
         sink_handle.await.unwrap();
+    }
+}
+
+use axum::response::IntoResponse;
+
+pub async fn handle_get_heap() -> Result<impl IntoResponse, (StatusCode, String)> {
+    let mut prof_ctl = jemalloc_pprof::PROF_CTL.as_ref().unwrap().lock().await;
+    require_profiling_activated(&prof_ctl)?;
+    let pprof = prof_ctl
+        .dump_pprof()
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    Ok(pprof)
+}
+
+/// Checks whether jemalloc profiling is activated an returns an error response if not.
+fn require_profiling_activated(prof_ctl: &jemalloc_pprof::JemallocProfCtl) -> Result<(), (StatusCode, String)> {
+    if prof_ctl.activated() {
+        Ok(())
+    } else {
+        Err((axum::http::StatusCode::FORBIDDEN, "heap profiling not activated".into()))
     }
 }

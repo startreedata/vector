@@ -28,16 +28,28 @@ extern crate derivative;
 #[macro_use]
 extern crate vector_lib;
 
-#[cfg(all(feature = "tikv-jemallocator", not(feature = "allocation-tracing")))]
-#[global_allocator]
-static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+// #[cfg(all(feature = "tikv-jemallocator", not(feature = "allocation-tracing")))]
+// #[global_allocator]
+// static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
-#[cfg(all(feature = "tikv-jemallocator", feature = "allocation-tracing"))]
+#[cfg(not(target_env = "msvc"))]
+use tikv_jemallocator::Jemalloc;
+
+#[cfg(not(target_env = "msvc"))]
 #[global_allocator]
-static ALLOC: self::internal_telemetry::allocations::Allocator<tikv_jemallocator::Jemalloc> =
-    self::internal_telemetry::allocations::get_grouped_tracing_allocator(
-        tikv_jemallocator::Jemalloc,
-    );
+static GLOBAL: Jemalloc = Jemalloc;
+
+// #[cfg(all(feature = "tikv-jemallocator", feature = "allocation-tracing"))]
+// #[global_allocator]
+// static ALLOC: self::internal_telemetry::allocations::Allocator<tikv_jemallocator::Jemalloc> =
+//     self::internal_telemetry::allocations::get_grouped_tracing_allocator(
+//         tikv_jemallocator::Jemalloc,
+//     );
+
+/// Some docs
+// #[allow(non_upper_case_globals)]
+// #[export_name = "malloc_conf"]
+// pub static malloc_conf: &[u8] = b"prof:true,prof_active:true,lg_prof_sample:19\0";
 
 #[allow(unreachable_pub)]
 pub mod internal_telemetry;
