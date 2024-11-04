@@ -469,8 +469,8 @@ impl PrometheusExporter {
                     .route("/debug/pprof/heap", axum::routing::get(handle_get_heap));
 
             // run our app with hyper, listening globally on port 3000
-            let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-            axum::serve(listener, app).await.unwrap();
+            let listener2 = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+            axum::serve(listener2, app).await.unwrap();
 
             Ok::<(), ()>(())
         });
