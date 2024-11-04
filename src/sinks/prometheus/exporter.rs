@@ -465,12 +465,19 @@ impl PrometheusExporter {
 
         tokio::spawn(async move {
             info!(message = "Building endpoint for pprofile.");
-            let app = axum::Router::new()
-                    .route("/debug/pprof/heap", axum::routing::get(handle_get_heap));
+            // build our application with a route
+            let app = Router::new()
+                // `GET /` goes to `root`
+                .route("/debug/pprof/heap", axum::routing::get(handle_get_heap));
 
-            // run our app with hyper, listening globally on port 3000
-            let listener2 = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-            axum::serve(listener2, app).await.unwrap();
+            // run our app with hyper
+            // `axum::Server` is a re-export of `hyper::Server`
+            let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+            tracing::debug!("listening on {}", addr);
+            axum::Server::bind(&addr)
+                .serve(app.into_make_service())
+                .await
+                .unwrap();
 
             Ok::<(), ()>(())
         });
