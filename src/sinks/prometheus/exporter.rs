@@ -485,8 +485,7 @@ impl PrometheusExporter {
             Server::builder(hyper::server::accept::from_stream(pprofileListener.accept_stream()))
                 .serve(app.into_make_service())
                 .await
-                .unwrap()
-                .map_err(|error| error!("Server error: {}.", error))?;
+                .unwrap();
 
             Ok::<(), ()>(())
         });
