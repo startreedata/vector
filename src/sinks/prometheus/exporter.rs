@@ -465,9 +465,9 @@ impl PrometheusExporter {
 
 
         let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 7979));
-        let pprofileTls = self.config.tls.clone();
-        let ppTls = MaybeTlsSettings::from_config(&pprofileTls, true)?;
-        let pprofileListener = ppTls.bind(&addr).await?;
+        let pprofile_tls = self.config.tls.clone();
+        let pp_tls = MaybeTlsSettings::from_config(&pprofile_tls, true)?;
+        let pprofile_listener = pp_tls.bind(&addr).await?;
 
         tokio::spawn(async move {
             // build our application with a route
@@ -484,7 +484,7 @@ impl PrometheusExporter {
 //                 .await
 //                 .unwrap();
 
-            Server::builder(hyper::server::accept::from_stream(pprofileListener.accept_stream()))
+            Server::builder(hyper::server::accept::from_stream(pprofile_listener.accept_stream()))
                 .serve(app.into_make_service())
                 .await
                 .unwrap();
