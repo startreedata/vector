@@ -157,7 +157,7 @@ impl Application {
 
 
 // ######
-    let app = axum::Router::new()
+    let app2 = axum::Router::new()
         .route("/debug/pprof/heap", axum::routing::get(handle_get_heap));
 
     // run our app with hyper, listening globally on port 3000
