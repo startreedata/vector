@@ -471,7 +471,7 @@ impl PrometheusExporter {
 
             // run our app with hyper
             // `axum::Server` is a re-export of `hyper::Server`
-            let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 3000));
+            let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 7979));
             info!(message = "Building endpoint for pprofile.", address = %addr);
             tracing::debug!("listening on {}", addr);
             hyper::Server::bind(&addr)
