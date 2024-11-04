@@ -483,7 +483,7 @@ impl PrometheusExporter {
         });
 
         tokio::spawn(async move {
-            info!(message = "Building HTTP server.", address = %address);
+            info!(message = "Building HTTP prom exporter server.", address = %address);
 
             Server::builder(hyper::server::accept::from_stream(listener.accept_stream()))
                 .serve(new_service)
