@@ -39,12 +39,12 @@ use tikv_jemallocator::Jemalloc;
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 
-#[cfg(all(feature = "tikv-jemallocator", feature = "allocation-tracing"))]
-#[global_allocator]
-static ALLOC: self::internal_telemetry::allocations::Allocator<tikv_jemallocator::Jemalloc> =
-    self::internal_telemetry::allocations::get_grouped_tracing_allocator(
-        tikv_jemallocator::Jemalloc,
-    );
+// #[cfg(all(feature = "tikv-jemallocator", feature = "allocation-tracing"))]
+// #[global_allocator]
+// static ALLOC: self::internal_telemetry::allocations::Allocator<tikv_jemallocator::Jemalloc> =
+//     self::internal_telemetry::allocations::get_grouped_tracing_allocator(
+//         tikv_jemallocator::Jemalloc,
+//     );
 
 /// Some docs
 // #[allow(non_upper_case_globals)]
