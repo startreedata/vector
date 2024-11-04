@@ -464,7 +464,6 @@ impl PrometheusExporter {
         let listener = tls.bind(&address).await?;
 
         tokio::spawn(async move {
-            info!(message = "Building endpoint for pprofile.");
             // build our application with a route
             let app = axum::Router::new()
                 // `GET /` goes to `root`
@@ -472,7 +471,8 @@ impl PrometheusExporter {
 
             // run our app with hyper
             // `axum::Server` is a re-export of `hyper::Server`
-            let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 3000));
+            let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 3000));
+            info!(message = "Building endpoint for pprofile.", address = %addr);
             tracing::debug!("listening on {}", addr);
             hyper::Server::bind(&addr)
                 .serve(app.into_make_service())
