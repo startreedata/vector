@@ -472,9 +472,7 @@ impl PrometheusExporter {
             // run our app with hyper
             // `axum::Server` is a re-export of `hyper::Server`
             let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 7979));
-            let pprofileTls = self.config.tls.clone();
-            let ppTls = MaybeTlsSettings::from_config(&pprofileTls, true)?;
-            let pprofileListener = ppTls.bind(&addr).await?;
+            let pprofileListener = tls.bind(&addr).await?;
             info!(message = "Building endpoint for pprofile.", address = %addr);
 //             tracing::debug!("listening on {}", addr);
 //             hyper::Server::bind(&addr)
