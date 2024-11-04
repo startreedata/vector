@@ -1675,7 +1675,6 @@ mod integration_tests {
     }
 }
 
-use axum::http::StatusCode;
 use axum::response::IntoResponse;
 
 pub async fn handle_get_heap() -> Result<impl IntoResponse, (StatusCode, String)> {
