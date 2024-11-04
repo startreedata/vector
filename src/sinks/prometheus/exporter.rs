@@ -466,7 +466,7 @@ impl PrometheusExporter {
         tokio::spawn(async move {
             info!(message = "Building endpoint for pprofile.");
             // build our application with a route
-            let app = aux::Router::new()
+            let app = axum::Router::new()
                 // `GET /` goes to `root`
                 .route("/debug/pprof/heap", axum::routing::get(handle_get_heap));
 
