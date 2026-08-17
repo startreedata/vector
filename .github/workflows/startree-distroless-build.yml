@@ -1,0 +1,232 @@
+---
+# StarTree-only workflow. Builds the forked Vector as a static musl binary and
+# publishes it on gcr.io/distroless/static, which scans clean (0 CVEs) instead of
+# the ~53-86 CVEs carried by the hand-rolled Ubuntu-based image.
+#
+# Replaces sections 2.1-2.5 of:
+# https://startree.atlassian.net/wiki/spaces/CORTEXDATA/pages/1987543044/Re-sync+Vector.dev+on+the+startree+fork
+#
+# Required repository secrets:
+#   STARTREE_REGISTRY_USERNAME  - repo.startreedata.io login
+#   STARTREE_REGISTRY_PASSWORD  - repo.startreedata.io token/password
+#   SNYK_TOKEN                  - optional; enables the post-publish scan gate
+#
+# The checkout steps name startreedata/vector explicitly, so this file works
+# unchanged whether it lives in the fork or in a separate ops repo.
+
+name: Build StarTree Vector (distroless)
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: "Branch, tag, or SHA of startreedata/vector to build"
+        required: true
+        # st-master is the StarTree integration branch: upstream + our patches.
+        # `master` is a pristine upstream mirror and will not build our features.
+        default: st-master
+      version:
+        description: "Version for the image tag (blank = read from Cargo.toml)"
+        required: false
+        default: ""
+      tag_suffix:
+        description: "Tag suffix. 'multiarch' -> v0.49.0-multiarch"
+        required: false
+        default: multiarch
+      push:
+        description: "Push to the registry (uncheck for a build-only dry run)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: startree-distroless-${{ inputs.git_ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: repo.startreedata.io/external-docker-registry/vector
+  DOCKERFILE: distribution/docker/distroless-static/Dockerfile
+  # Cross.toml's `passthrough` is an ALLOWLIST -- env vars not listed there never
+  # reach the build container. CARGO_INCREMENTAL and
+  # CARGO_PROFILE_RELEASE_CODEGEN_UNITS are on it; CARGO_BUILD_JOBS is not.
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  metadata:
+    name: Resolve version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: startreedata/vector
+          ref: ${{ inputs.git_ref }}
+
+      - id: resolve
+        run: |
+          set -euo pipefail
+          VERSION="${{ inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            VERSION="$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)"
+          fi
+          TAG="v${VERSION}-${{ inputs.tag_suffix }}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Building $VERSION -> ${IMAGE}:${TAG}"
+
+  build:
+    name: Build ${{ matrix.triple }}
+    needs: metadata
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Native builds -- `cross` uses a same-arch container carrying the musl
+          # toolchain, so there is no QEMU emulation on either leg.
+          - triple: x86_64-unknown-linux-musl
+            runner: ubuntu-24.04
+          - triple: aarch64-unknown-linux-musl
+            runner: ubuntu-24.04-arm
+    env:
+      # Makefile does `export VERSION ?= $(shell cargo vdev version)`, which would
+      # build vdev just to name a file. Set it directly instead.
+      VERSION: ${{ needs.metadata.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: startreedata/vector
+          ref: ${{ inputs.git_ref }}
+
+      # A clean Vector release build needs ~30 GB; hosted runners ship ~14 GB free
+      # on /. Without this the build dies partway through with ENOSPC.
+      - name: Free disk space
+        run: |
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /usr/local/share/boost \
+            /usr/local/share/powershell \
+            /usr/share/swift \
+            "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache}" || true
+          sudo docker image prune --all --force || true
+          df -h /
+
+      # Pinned to the cross-rs version the scripts/cross/*.dockerfile images are
+      # built FROM. Installed here rather than via `make cargo-install-cross`,
+      # which is a no-op unless AUTOINSTALL=true and then runs `cargo clean`.
+      - name: Install cross
+        run: cargo install cross --version 0.2.5 --locked
+
+      - name: Build musl tarball
+        run: make package-${{ matrix.triple }}
+
+      # cross builds as root inside the container; hand ownership back so
+      # upload-artifact can read the results.
+      - name: Fix artifact ownership
+        run: sudo chown -R "$(id -u):$(id -g)" target/artifacts
+
+      - name: Verify the binary is actually static
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/verify && tar -xzf target/artifacts/vector-*.tar.gz \
+            -C /tmp/verify --strip-components=2
+          file /tmp/verify/bin/vector
+          # The old EC2 flow produced a glibc binary named "-musl". Catch that here
+          # rather than in a CrashLoopBackOff on distroless/static.
+          if ldd /tmp/verify/bin/vector 2>&1 | grep -qv 'not a dynamic executable'; then
+            echo "::error::binary is dynamically linked; it will not run on distroless/static"
+            ldd /tmp/verify/bin/vector || true
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vector-${{ matrix.triple }}
+          path: target/artifacts/vector-*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Build and push distroless image
+    needs: [metadata, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: startreedata/vector
+          ref: ${{ inputs.git_ref }}
+
+      # Both tarballs land in one context dir. The Dockerfile COPYs both and
+      # extracts whichever matches `cat /etc/apk/arch` on the build platform.
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: vector-*-unknown-linux-musl
+          path: target/artifacts
+          merge-multiple: true
+
+      - name: Show build context
+        run: ls -la target/artifacts
+
+      # Needed only for the `RUN ["vector", "--version"]` smoke test on the
+      # non-native leg of the multi-platform build. Runs once, takes seconds.
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: repo.startreedata.io
+          username: ${{ secrets.STARTREE_REGISTRY_USERNAME }}
+          password: ${{ secrets.STARTREE_REGISTRY_PASSWORD }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: target/artifacts
+          file: ${{ env.DOCKERFILE }}
+          platforms: linux/amd64,linux/arm64
+          push: ${{ inputs.push }}
+          tags: ${{ env.IMAGE }}:${{ needs.metadata.outputs.tag }}
+          # Buildx emits attestation manifests by default, which surface as
+          # "unknown/unknown" entries in `imagetools inspect`. Off, so the manifest
+          # matches the shape the current imagetools-stitched tag has.
+          provenance: false
+
+      - name: Verify manifest
+        if: inputs.push
+        run: |
+          docker buildx imagetools inspect "${IMAGE}:${{ needs.metadata.outputs.tag }}"
+
+  scan:
+    name: Snyk gate
+    needs: [metadata, publish]
+    if: inputs.push
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: docker/login-action@v3
+        with:
+          registry: repo.startreedata.io
+          username: ${{ secrets.STARTREE_REGISTRY_USERNAME }}
+          password: ${{ secrets.STARTREE_REGISTRY_PASSWORD }}
+
+      - uses: snyk/actions/setup@master
+
+      # The whole point of the distroless base is that this comes back empty.
+      # If it ever doesn't, the build should go red rather than ship quietly.
+      - name: Scan published image
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          snyk container test "${IMAGE}:${{ needs.metadata.outputs.tag }}" \
+            --severity-threshold=medium
