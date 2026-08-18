@@ -155,8 +155,10 @@ jobs:
           # rather than in a CrashLoopBackOff on distroless/static. `file` is used
           # rather than `ldd` because the aarch64 binary is cross-compiled on an
           # amd64 host, where ldd cannot inspect a foreign-architecture binary.
+          # Rust's musl targets emit a static-PIE, which `file` reports as
+          # "static-pie linked" rather than "statically linked". Both are static.
           case "$DESC" in
-            *"statically linked"*) echo "OK: statically linked" ;;
+            *"statically linked"*|*"static-pie linked"*) echo "OK: statically linked" ;;
             *) echo "::error::binary is not statically linked; it will not run on distroless/static"
                exit 1 ;;
           esac
