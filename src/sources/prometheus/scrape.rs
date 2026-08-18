@@ -677,6 +677,8 @@ mod test {
             query: HashMap::new(),
             auth: None,
             tls: None,
+            metric_name_allowlist: vec![],
+            metric_name_denylist: vec![],
         };
 
         let events = run_and_assert_source_compliance(
@@ -711,6 +713,8 @@ mod test {
             query: HashMap::new(),
             auth: None,
             tls: None,
+            metric_name_allowlist: vec![],
+            metric_name_denylist: vec![],
         };
 
         let events = run_and_assert_source_compliance(
@@ -763,6 +767,8 @@ mod test {
             query: HashMap::new(),
             auth: None,
             tls: None,
+            metric_name_allowlist: vec![],
+            metric_name_denylist: vec![],
         };
 
         let events = run_and_assert_source_compliance(
@@ -829,6 +835,8 @@ mod test {
             query: HashMap::new(),
             auth: None,
             tls: None,
+            metric_name_allowlist: vec![],
+            metric_name_denylist: vec![],
         };
 
         let events = run_and_assert_source_compliance(
@@ -898,6 +906,8 @@ mod test {
             ]),
             auth: None,
             tls: None,
+            metric_name_allowlist: vec![],
+            metric_name_denylist: vec![],
         };
 
         let events = run_and_assert_source_compliance(
@@ -1000,6 +1010,8 @@ mod test {
                 timeout: default_timeout(),
                 tls: None,
                 auth: None,
+                metric_name_allowlist: vec![],
+                metric_name_denylist: vec![],
             },
         );
         config.add_sink(
@@ -1090,6 +1102,8 @@ mod integration_tests {
             query: HashMap::new(),
             auth: None,
             tls: None,
+            metric_name_allowlist: vec![],
+            metric_name_denylist: vec![],
         };
 
         let events = run_and_assert_source_compliance(
