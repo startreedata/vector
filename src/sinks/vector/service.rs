@@ -5,8 +5,10 @@ use http::Uri;
 use hyper::client::HttpConnector;
 use hyper_openssl::HttpsConnector;
 use hyper_proxy::ProxyConnector;
+use indexmap::IndexMap;
 use prost::Message;
-use tonic::{body::BoxBody, IntoRequest};
+use tonic::body::BoxBody;
+use tonic::metadata::MetadataKey;
 use tower::Service;
 use vector_lib::request_metadata::{GroupedCountByteSize, MetaDescriptive, RequestMetadata};
 use vector_lib::stream::DriverResponse;
@@ -25,6 +27,7 @@ pub struct VectorService {
     pub client: proto_vector::Client<HyperSvc>,
     pub protocol: String,
     pub endpoint: String,
+    pub headers: Option<IndexMap<String, String>>,
 }
 
 pub struct VectorResponse {
@@ -69,6 +72,7 @@ impl VectorService {
         hyper_client: hyper::Client<ProxyConnector<HttpsConnector<HttpConnector>>, BoxBody>,
         uri: Uri,
         compression: bool,
+        headers: Option<IndexMap<String, String>>,
     ) -> Self {
         let (protocol, endpoint) = uri::protocol_endpoint(uri.clone());
         let mut proto_client = proto_vector::Client::new(HyperSvc {
@@ -79,10 +83,12 @@ impl VectorService {
         if compression {
             proto_client = proto_client.send_compressed(tonic::codec::CompressionEncoding::Gzip);
         }
+
         Self {
             client: proto_client,
             protocol,
             endpoint,
+            headers
         }
     }
 }
@@ -105,14 +111,30 @@ impl Service<VectorRequest> for VectorService {
     // Emission of internal events for errors and dropped events is handled upstream by the caller.
     fn call(&mut self, mut list: VectorRequest) -> Self::Future {
         let mut service = self.clone();
+        let service_header = service.headers.unwrap_or_default();
+        let mut header_entries: Vec<(String, String)> = service_header
+                    .into_iter()
+                    .map(|(k, v)| (k.to_string(), v.to_string()))
+                    .collect();
         let byte_size = list.request.encoded_len();
         let metadata = std::mem::take(list.metadata_mut());
         let events_byte_size = metadata.into_events_estimated_json_encoded_byte_size();
 
+        let grpc_request = list.request;  // Get the actual gRPC request object from your custom request
+
+        let mut tonic_request = tonic::Request::new(grpc_request);  // Convert it to a tonic::Request
+
+        {
+            let metadata = tonic_request.metadata_mut();
+            for (k, v) in header_entries.drain(..) {
+                metadata.insert(MetadataKey::from_bytes(k.as_bytes()).unwrap(), v.parse().unwrap());
+            }
+        }
+
         let future = async move {
             service
                 .client
-                .push_events(list.request.into_request())
+                .push_events(tonic_request)
                 .map_ok(|_response| {
                     emit!(EndpointBytesSent {
                         byte_size,
