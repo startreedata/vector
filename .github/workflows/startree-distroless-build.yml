@@ -1,37 +1,15 @@
 ---
-# StarTree-only workflow. Builds the forked Vector as a static musl binary and
-# publishes it on gcr.io/distroless/static, which scans clean (0 CVEs) instead of
-# the ~53-86 CVEs carried by the hand-rolled Ubuntu-based image.
-#
-# Replaces sections 2.1-2.5 of:
-# https://startree.atlassian.net/wiki/spaces/CORTEXDATA/pages/1987543044/Re-sync+Vector.dev+on+the+startree+fork
-#
-# Release versioning follows the same scheme as startree-dex's st-release.yml:
-# an upstream base version plus a StarTree build number.
-#
-#   base_version 0.49.0 + build_number 1  ->  v0.49.0-ST-1
-#
-# Each release pushes that image tag (optionally :latest too) and creates a
-# matching annotated git tag on the built commit.
+# StarTree-only workflow. Builds the forked Vector as a distroless multiarch image.
 #
 # Required repository secrets:
 #   STARTREE_REGISTRY_USERNAME  - repo.startreedata.io login
 #   STARTREE_REGISTRY_PASSWORD  - repo.startreedata.io token/password
-#
-# The checkout steps name startreedata/vector explicitly, so this file works
-# unchanged whether it lives in the fork or in a separate ops repo.
 
 name: Build StarTree Vector (distroless)
 
 on:
   workflow_dispatch:
     inputs:
-      git_ref:
-        description: "Branch, tag, or SHA of startreedata/vector to build"
-        required: true
-        # st-master is the StarTree integration branch: upstream + our patches.
-        # `master` is a pristine upstream mirror and will not build our features.
-        default: st-master
       base_version:
         description: "Upstream Vector version this release is based on, e.g. 0.49.0"
         required: true
@@ -40,10 +18,6 @@ on:
         description: "StarTree build number. 0.49.0 + 1 -> v0.49.0-ST-1"
         required: true
         default: "1"
-      tag_latest:
-        description: "Also push the :latest tag"
-        type: boolean
-        default: true
       push:
         description: "Push to the registry (uncheck for a build-only dry run)"
         type: boolean
@@ -54,7 +28,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: startree-distroless-${{ inputs.git_ref }}
+  group: startree-distroless-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -76,8 +50,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: startreedata/vector
-          ref: ${{ inputs.git_ref }}
           # Needed so the tag-existence check below sees existing tags.
           fetch-depth: 0
 
@@ -93,7 +65,7 @@ jobs:
           # upstream version -- the ST suffix belongs to the image tag only.
           CARGO_VERSION="$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)"
           if [ "$VERSION" != "$CARGO_VERSION" ]; then
-            echo "::warning::base_version ($VERSION) does not match Cargo.toml ($CARGO_VERSION) on ${{ inputs.git_ref }}"
+            echo "::warning::base_version ($VERSION) does not match Cargo.toml ($CARGO_VERSION) on ${{ github.ref_name }}"
           fi
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -102,7 +74,7 @@ jobs:
           {
             echo "image_tags<<EOF"
             echo "${IMAGE}:${TAG}"
-            if [ "${{ inputs.tag_latest }}" = "true" ]; then echo "${IMAGE}:latest"; fi
+            echo "${IMAGE}:latest"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -142,9 +114,6 @@ jobs:
       VERSION: ${{ needs.metadata.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          repository: startreedata/vector
-          ref: ${{ inputs.git_ref }}
 
       # A clean Vector release build needs ~30 GB; hosted runners ship ~14 GB free
       # on /. Without this the build dies partway through with ENOSPC.
@@ -203,9 +172,6 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-        with:
-          repository: startreedata/vector
-          ref: ${{ inputs.git_ref }}
 
       # Both tarballs land in one context dir. The Dockerfile COPYs both and
       # extracts whichever matches `cat /etc/apk/arch` on the build platform.
@@ -258,9 +224,6 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-        with:
-          repository: startreedata/vector
-          ref: ${{ inputs.git_ref }}
 
       # Tagged only after publish succeeds, so a failed build never leaves an
       # orphan release tag behind.
@@ -281,7 +244,7 @@ jobs:
             echo
             echo "| | |"
             echo "|---|---|"
-            echo "| Built from | \`${{ inputs.git_ref }}\` |"
+            echo "| Built from | \`${{ github.ref_name }}\` |"
             echo "| Upstream base | \`${{ inputs.base_version }}\` |"
             echo "| StarTree build | \`${{ inputs.build_number }}\` |"
             echo
