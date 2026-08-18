@@ -92,18 +92,22 @@ jobs:
   build:
     name: Build ${{ matrix.triple }}
     needs: metadata
-    runs-on: ${{ matrix.runner }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # Native builds -- `cross` uses a same-arch container carrying the musl
-          # toolchain, so there is no QEMU emulation on either leg.
-          - triple: x86_64-unknown-linux-musl
-            runner: ubuntu-24.04
-          - triple: aarch64-unknown-linux-musl
-            runner: ubuntu-24.04-arm
+        # Both legs run on amd64. The cross-rs base images the Makefile builds
+        # FROM (scripts/cross/*.dockerfile) are published for linux/amd64 only --
+        # the aarch64 one is an amd64 container holding a cross-toolchain, not an
+        # arm64 image. On an arm64 runner it fails with "no match for platform in
+        # manifest". This is also how upstream's publish.yml builds it.
+        #
+        # This is real cross-compilation, not emulation: cross only needs QEMU to
+        # *run* target binaries (tests), which `cross build` does not do.
+        triple:
+          - x86_64-unknown-linux-musl
+          - aarch64-unknown-linux-musl
     env:
       # Makefile does `export VERSION ?= $(shell cargo vdev version)`, which would
       # build vdev just to name a file. Set it directly instead.
@@ -145,14 +149,19 @@ jobs:
           set -euo pipefail
           mkdir -p /tmp/verify && tar -xzf target/artifacts/vector-*.tar.gz \
             -C /tmp/verify --strip-components=2
-          file /tmp/verify/bin/vector
+          DESC="$(file -b /tmp/verify/bin/vector)"
+          echo "$DESC"
           # The old EC2 flow produced a glibc binary named "-musl". Catch that here
-          # rather than in a CrashLoopBackOff on distroless/static.
-          if ldd /tmp/verify/bin/vector 2>&1 | grep -qv 'not a dynamic executable'; then
-            echo "::error::binary is dynamically linked; it will not run on distroless/static"
-            ldd /tmp/verify/bin/vector || true
-            exit 1
-          fi
+          # rather than in a CrashLoopBackOff on distroless/static. `file` is used
+          # rather than `ldd` because the aarch64 binary is cross-compiled on an
+          # amd64 host, where ldd cannot inspect a foreign-architecture binary.
+          # Rust's musl targets emit a static-PIE, which `file` reports as
+          # "static-pie linked" rather than "statically linked". Both are static.
+          case "$DESC" in
+            *"statically linked"*|*"static-pie linked"*) echo "OK: statically linked" ;;
+            *) echo "::error::binary is not statically linked; it will not run on distroless/static"
+               exit 1 ;;
+          esac
 
       - uses: actions/upload-artifact@v4
         with:
