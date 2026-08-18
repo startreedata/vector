@@ -27,10 +27,6 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: startree-distroless-${{ github.ref }}
-  cancel-in-progress: false
-
 env:
   IMAGE: repo.startreedata.io/external-docker-registry/vector
   DOCKERFILE: distribution/docker/distroless-static/Dockerfile
