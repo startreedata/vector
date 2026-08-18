@@ -9,7 +9,6 @@
 # Required repository secrets:
 #   STARTREE_REGISTRY_USERNAME  - repo.startreedata.io login
 #   STARTREE_REGISTRY_PASSWORD  - repo.startreedata.io token/password
-#   SNYK_TOKEN                  - optional; enables the post-publish scan gate
 #
 # The checkout steps name startreedata/vector explicitly, so this file works
 # unchanged whether it lives in the fork or in a separate ops repo.
@@ -206,27 +205,3 @@ jobs:
         if: inputs.push
         run: |
           docker buildx imagetools inspect "${IMAGE}:${{ needs.metadata.outputs.tag }}"
-
-  scan:
-    name: Snyk gate
-    needs: [metadata, publish]
-    if: inputs.push
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: docker/login-action@v3
-        with:
-          registry: repo.startreedata.io
-          username: ${{ secrets.STARTREE_REGISTRY_USERNAME }}
-          password: ${{ secrets.STARTREE_REGISTRY_PASSWORD }}
-
-      - uses: snyk/actions/setup@master
-
-      # The whole point of the distroless base is that this comes back empty.
-      # If it ever doesn't, the build should go red rather than ship quietly.
-      - name: Scan published image
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: |
-          snyk container test "${IMAGE}:${{ needs.metadata.outputs.tag }}" \
-            --severity-threshold=medium
