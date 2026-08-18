@@ -1,47 +1,34 @@
 ---
-# StarTree-only workflow. Builds the forked Vector as a static musl binary and
-# publishes it on gcr.io/distroless/static, which scans clean (0 CVEs) instead of
-# the ~53-86 CVEs carried by the hand-rolled Ubuntu-based image.
-#
-# Replaces sections 2.1-2.5 of:
-# https://startree.atlassian.net/wiki/spaces/CORTEXDATA/pages/1987543044/Re-sync+Vector.dev+on+the+startree+fork
+# StarTree-only workflow. Builds the forked Vector as a distroless multiarch image.
 #
 # Required repository secrets:
 #   STARTREE_REGISTRY_USERNAME  - repo.startreedata.io login
 #   STARTREE_REGISTRY_PASSWORD  - repo.startreedata.io token/password
-#
-# The checkout steps name startreedata/vector explicitly, so this file works
-# unchanged whether it lives in the fork or in a separate ops repo.
 
 name: Build StarTree Vector (distroless)
 
 on:
   workflow_dispatch:
     inputs:
-      git_ref:
-        description: "Branch, tag, or SHA of startreedata/vector to build"
+      base_version:
+        description: "Upstream Vector version this release is based on, e.g. 0.49.0"
         required: true
-        # st-master is the StarTree integration branch: upstream + our patches.
-        # `master` is a pristine upstream mirror and will not build our features.
-        default: st-master
-      version:
-        description: "Version for the image tag (blank = read from Cargo.toml)"
-        required: false
-        default: ""
-      tag_suffix:
-        description: "Tag suffix. 'multiarch' -> v0.49.0-multiarch"
-        required: false
-        default: multiarch
+        default: "0.49.0"
+      build_number:
+        description: "StarTree build number. 0.49.0 + 1 -> v0.49.0-ST-1"
+        required: true
+        default: "1"
       push:
         description: "Push to the registry (uncheck for a build-only dry run)"
         type: boolean
         default: true
 
+# contents: write is needed to push the release git tag.
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: startree-distroless-${{ inputs.git_ref }}
+  group: startree-distroless-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -59,23 +46,52 @@ jobs:
     outputs:
       version: ${{ steps.resolve.outputs.version }}
       tag: ${{ steps.resolve.outputs.tag }}
+      image_tags: ${{ steps.resolve.outputs.image_tags }}
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: startreedata/vector
-          ref: ${{ inputs.git_ref }}
+          # Needed so the tag-existence check below sees existing tags.
+          fetch-depth: 0
 
       - id: resolve
         run: |
           set -euo pipefail
-          VERSION="${{ inputs.version }}"
-          if [ -z "$VERSION" ]; then
-            VERSION="$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)"
+          VERSION="${{ inputs.base_version }}"
+          BUILD="${{ inputs.build_number }}"
+          TAG="v${VERSION}-ST-${BUILD}"
+
+          # The Makefile names the tarball vector-${VERSION}-<triple>.tar.gz and the
+          # distroless Dockerfile globs `vector-0*`. Keep VERSION as the plain
+          # upstream version -- the ST suffix belongs to the image tag only.
+          CARGO_VERSION="$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)"
+          if [ "$VERSION" != "$CARGO_VERSION" ]; then
+            echo "::warning::base_version ($VERSION) does not match Cargo.toml ($CARGO_VERSION) on ${{ github.ref_name }}"
           fi
-          TAG="v${VERSION}-${{ inputs.tag_suffix }}"
+
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "image_tags<<EOF"
+            echo "${IMAGE}:${TAG}"
+            echo "${IMAGE}:latest"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
           echo "Building $VERSION -> ${IMAGE}:${TAG}"
+
+      # Fail in seconds rather than after a 90-minute build if this release
+      # number was already cut.
+      - name: Check the release tag is free
+        if: inputs.push
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.resolve.outputs.tag }}"
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "::error::git tag ${TAG} already exists; bump build_number"
+            exit 1
+          fi
+          echo "${TAG} is free"
 
   build:
     name: Build ${{ matrix.triple }}
@@ -98,9 +114,6 @@ jobs:
       VERSION: ${{ needs.metadata.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          repository: startreedata/vector
-          ref: ${{ inputs.git_ref }}
 
       # A clean Vector release build needs ~30 GB; hosted runners ship ~14 GB free
       # on /. Without this the build dies partway through with ENOSPC.
@@ -159,9 +172,6 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-        with:
-          repository: startreedata/vector
-          ref: ${{ inputs.git_ref }}
 
       # Both tarballs land in one context dir. The Dockerfile COPYs both and
       # extracts whichever matches `cat /etc/apk/arch` on the build platform.
@@ -195,7 +205,7 @@ jobs:
           file: ${{ env.DOCKERFILE }}
           platforms: linux/amd64,linux/arm64
           push: ${{ inputs.push }}
-          tags: ${{ env.IMAGE }}:${{ needs.metadata.outputs.tag }}
+          tags: ${{ needs.metadata.outputs.image_tags }}
           # Buildx emits attestation manifests by default, which surface as
           # "unknown/unknown" entries in `imagetools inspect`. Off, so the manifest
           # matches the shape the current imagetools-stitched tag has.
@@ -205,3 +215,41 @@ jobs:
         if: inputs.push
         run: |
           docker buildx imagetools inspect "${IMAGE}:${{ needs.metadata.outputs.tag }}"
+
+  release:
+    name: Tag the release
+    needs: [metadata, build, publish]
+    if: inputs.push
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # Tagged only after publish succeeds, so a failed build never leaves an
+      # orphan release tag behind.
+      - name: Create and push the release tag
+        run: |
+          set -euo pipefail
+          TAG="${{ needs.metadata.outputs.tag }}"
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git tag -a "$TAG" -m "StarTree release $TAG (upstream ${{ inputs.base_version }}, build ${{ inputs.build_number }})"
+          git push origin "$TAG"
+          echo "Tagged $(git rev-parse --short HEAD) as $TAG"
+
+      - name: Summary
+        run: |
+          {
+            echo "### StarTree Vector release \`${{ needs.metadata.outputs.tag }}\`"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Built from | \`${{ github.ref_name }}\` |"
+            echo "| Upstream base | \`${{ inputs.base_version }}\` |"
+            echo "| StarTree build | \`${{ inputs.build_number }}\` |"
+            echo
+            echo "Images pushed:"
+            echo '```'
+            echo "${{ needs.metadata.outputs.image_tags }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
