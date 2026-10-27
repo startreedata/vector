@@ -28,7 +28,7 @@ permissions:
   contents: write
 
 env:
-  IMAGE: repo.startreedata.io/external-docker-registry/vector
+  IMAGE: repo.startreedata.io/startree-docker-registry/vector
   DOCKERFILE: distribution/docker/distroless-static/Dockerfile
   # Cross.toml's `passthrough` is an ALLOWLIST -- env vars not listed there never
   # reach the build container. CARGO_INCREMENTAL and
